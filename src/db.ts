@@ -1,25 +1,32 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { Pool } from 'pg';
 import fs from 'fs';
+import path from 'path';
 
-const dbPath = path.join(__dirname, '../database.db');
-const db = new Database(dbPath);
-
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+});
 
 // Run migrations
-const migrationsDir = path.join(__dirname, '../migrations');
-if (fs.existsSync(migrationsDir)) {
-  const migrationFiles = fs.readdirSync(migrationsDir).sort();
-  for (const file of migrationFiles) {
-    if (file.endsWith('.sql')) {
-      const migrationPath = path.join(migrationsDir, file);
-      const sql = fs.readFileSync(migrationPath, 'utf-8');
-      db.exec(sql);
-      console.log(`Ran migration: ${file}`);
+const runMigrations = async () => {
+  const migrationsDir = path.join(__dirname, '../migrations');
+  if (fs.existsSync(migrationsDir)) {
+    const migrationFiles = fs.readdirSync(migrationsDir).sort();
+    for (const file of migrationFiles) {
+      if (file.endsWith('.sql')) {
+        const migrationPath = path.join(migrationsDir, file);
+        const sql = fs.readFileSync(migrationPath, 'utf-8');
+        try {
+          await pool.query(sql);
+          console.log(`Ran migration: ${file}`);
+        } catch (error) {
+          console.error(`Failed to run migration ${file}:`, error);
+        }
+      }
     }
   }
-}
+};
 
-export default db;
+runMigrations();
+
+export default pool;

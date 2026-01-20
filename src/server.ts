@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 // Endpoint to receive waitlist emails
-app.post('/waitlist', (req: Request, res: Response) => {
+app.post('/waitlist', async (req: Request, res: Response) => {
   const { email } = req.body;
 
   if (!email) {
@@ -26,11 +26,10 @@ app.post('/waitlist', (req: Request, res: Response) => {
 
   // Insert email into database
   try {
-    const stmt = db.prepare('INSERT INTO waitlist (email) VALUES (?)');
-    stmt.run(email);
+    await db.query('INSERT INTO waitlist (email) VALUES ($1)', [email]);
     res.status(200).json({ message: 'Email added to waitlist' });
   } catch (error: any) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === '23505') { // PostgreSQL unique violation
       res.status(409).json({ error: 'Email already in waitlist' });
     } else {
       console.error(error);
@@ -40,11 +39,10 @@ app.post('/waitlist', (req: Request, res: Response) => {
 });
 
 // Get all waitlist emails
-app.get('/waitlist', (req: Request, res: Response) => {
+app.get('/waitlist', async (req: Request, res: Response) => {
   try {
-    const stmt = db.prepare('SELECT id, email, created_at FROM waitlist ORDER BY created_at DESC');
-    const emails = stmt.all();
-    res.status(200).json(emails);
+    const result = await db.query('SELECT id, email, created_at FROM waitlist ORDER BY created_at DESC');
+    res.status(200).json(result.rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal server error' });

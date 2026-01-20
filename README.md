@@ -1,6 +1,6 @@
 # Waitlist Backend
 
-A simple TypeScript backend to receive waitlist emails using Express.js.
+A simple TypeScript backend to receive waitlist emails using Express.js and PostgreSQL.
 
 ## Setup
 
@@ -9,7 +9,11 @@ A simple TypeScript backend to receive waitlist emails using Express.js.
    npm install
    ```
 
-2. Build the project:
+2. Set up environment variables:
+   - Copy `.env.example` to `.env`
+   - Add your Supabase database URL to `DATABASE_URL`
+
+3. Build the project:
    ```bash
    npm run build
    ```
@@ -57,7 +61,21 @@ Retrieve all emails in the waitlist.
 ]
 ```
 
-Emails are stored in an SQLite database (`database.db`).
+Emails are stored in a PostgreSQL database on Supabase.
+
+## Deployment
+
+### Render
+1. Connect your GitHub repository to Render
+2. Set build command: `npm run build`
+3. Set start command: `npm start`
+4. Add environment variable: `DATABASE_URL` (from Supabase)
+5. Deploy!
+
+### Supabase
+1. Create a new project on Supabase
+2. Run the migration SQL in the Supabase SQL editor
+3. Copy the database URL to your environment variables
 
 ## Running the Server
 
