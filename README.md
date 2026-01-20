@@ -1,82 +1,87 @@
-# Waitlist Backend
+## Waitlist API (Express + Supabase, Render-ready)
 
-A simple TypeScript backend to receive waitlist emails using Express.js and PostgreSQL.
+Minimal backend API that accepts waitlist emails, stores them in Supabase, and is ready to deploy on Render.
 
-## Setup
+### Endpoints
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+- **POST** `/waitlist`
+  - **Body**: `{ "email": "user@example.com" }`
+  - **Responses**:
+    - `201` – `{ message: "Successfully joined the waitlist.", email: "user@example.com" }`
+    - `200` – `{ message: "You are already on the waitlist.", email: "user@example.com" }`
+    - `400` – `{ error: "Email is required." | "Invalid email format." }`
+    - `500` – `{ error: "Failed to save email. Please try again later." | "Internal server error." }`
 
-2. Set up environment variables:
-   - Copy `.env.example` to `.env`
-   - Add your Supabase database URL to `DATABASE_URL`
+- **GET** `/health`
+  - Simple health check: `{ "status": "ok" }`
 
-3. Build the project:
-   ```bash
-   npm run build
-   ```
+### Required Environment Variables
 
-3. Start the server:
-   ```bash
-   npm start
-   ```
+Set these in your local `.env` and in Render’s **Environment** settings:
 
-For development:
+- **`PORT`**
+  - Port for the Express server.
+  - **On Render**: Render automatically sets `PORT`; you don’t need to define it manually.
+
+- **`SUPABASE_URL`**
+  - Your Supabase project URL.
+  - From Supabase: **Project Settings → API → Project URL**.
+
+- **`SUPABASE_SERVICE_ROLE_KEY`**
+  - Your Supabase **service_role** key (backend-only, high-privilege).
+  - From Supabase: **Project Settings → API → service_role**.
+  - **Never expose this key in frontend or public code.**
+
+- **`WAITLIST_TABLE`** (optional)
+  - Name of the table where emails are stored, default is `waitlist`.
+
+### Supabase Table Schema (recommended)
+
+Create a table named `waitlist` with at least:
+
+- **`id`**: `uuid`, default `uuid_generate_v4()`, primary key
+- **`email`**: `text`, `unique`
+- **`created_at`**: `timestamptz`, default `now()`
+
+Example SQL:
+
+```sql
+create table if not exists public.waitlist (
+  id uuid primary key default gen_random_uuid(),
+  email text unique not null,
+  created_at timestamptz not null default now()
+);
+```
+
+### Local Development
+
+1. **Install dependencies**
+
+```bash
+cd /Users/apple/Downloads/Archive/senseifi/waitlist-view
+npm install
+```
+
+2. **Create `.env`** in the project root and set the variables listed above.
+
+3. **Run the server**
+
 ```bash
 npm run dev
 ```
 
-## API
+4. **Test the API**
 
-### POST /waitlist
-
-Add an email to the waitlist.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com"
-}
+```bash
+curl -X POST http://localhost:3000/waitlist \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com"}'
 ```
 
-**Response:**
-- 200: Email added successfully
-- 400: Invalid email or missing email
-- 409: Email already exists
+### Render Deployment Notes
 
-### GET /waitlist
+- **Environment**: Node
+- **Build Command**: `npm install`
+- **Start Command**: `npm start`
+- **Environment Variables**: Add `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and (optionally) `WAITLIST_TABLE`.
 
-Retrieve all emails in the waitlist.
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "email": "user@example.com",
-    "created_at": "2026-01-20T12:00:00.000Z"
-  }
-]
-```
-
-Emails are stored in a PostgreSQL database on Supabase.
-
-## Deployment
-
-### Render
-1. Connect your GitHub repository to Render
-2. Set build command: `npm run build`
-3. Set start command: `npm start`
-4. Add environment variable: `DATABASE_URL` (from Supabase)
-5. Deploy!
-
-### Supabase
-1. Create a new project on Supabase
-2. Run the migration SQL in the Supabase SQL editor
-3. Copy the database URL to your environment variables
-
-## Running the Server
-
-The server runs on port 3000 by default. You can change it with the `PORT` environment variable.

@@ -1,6 +1,0 @@
--- Migration: Create waitlist table
-CREATE TABLE IF NOT EXISTS waitlist (
-  id SERIAL PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
