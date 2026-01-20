@@ -89,6 +89,29 @@ app.post('/waitlist', async (req, res) => {
   }
 });
 
+// GET /waitlist - fetch all waitlist entries (ordered by created_at desc)
+app.get('/waitlist', async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from(WAITLIST_TABLE)
+      .select('id, email, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase fetch error:', error);
+      return res.status(500).json({ error: 'Failed to fetch waitlist.' });
+    }
+
+    return res.json({
+      count: data?.length || 0,
+      entries: data || []
+    });
+  } catch (err) {
+    console.error('Unexpected error in GET /waitlist:', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Waitlist API listening on port ${PORT}`);
