@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Senseifi — Waitlist</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <main class="container">
+      <header class="header">
+        <div class="brand">
+          <!-- Drop your real logo at: frontend/assets/senseifi-logo.svg -->
+          <img class="logo" src="./assets/senseifi-logo.svg" alt="Senseifi logo" />
+          <div class="brandText">
+            <div class="title">Waitlist</div>
+            <div class="subtitle">All collected emails (latest first)</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="refreshBtn" class="btn btnPrimary" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="cardHeader">
+          <div class="stats">
+            <div class="stat">
+              <div class="statLabel">Total</div>
+              <div id="count" class="statValue">—</div>
+            </div>
+          </div>
+          <div class="searchWrap">
+            <input id="search" class="search" placeholder="Search email…" autocomplete="off" />
+          </div>
+        </div>
+
+        <div id="state" class="state"></div>
+
+        <div class="tableWrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th class="right">Joined</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <div class="hint">
+          API: <code id="apiBase">same-origin</code>
+        </div>
+      </footer>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
