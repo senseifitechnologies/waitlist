@@ -110,6 +110,7 @@ async function joinWaitlistHandler(req, res) {
     }
 
     const newId = data.id;
+    let referralRecorded = false;
 
     if (typeof refCode === 'string' && refCode.trim()) {
       const trimmedRef = refCode.trim();
@@ -119,10 +120,15 @@ async function joinWaitlistHandler(req, res) {
         .eq('referral_code', trimmedRef)
         .maybeSingle();
       if (referrerRow && referrerRow.id !== newId) {
-        await supabase.from(REFERRALS_TABLE).insert({
+        const { error: refErr } = await supabase.from(REFERRALS_TABLE).insert({
           referrer_id: referrerRow.id,
           referred_id: newId
         });
+        if (refErr) {
+          console.error('Referral insert failed:', refErr);
+        } else {
+          referralRecorded = true;
+        }
       }
     }
 
@@ -130,7 +136,8 @@ async function joinWaitlistHandler(req, res) {
       message: 'Successfully joined the waitlist.',
       email: data.email,
       referral_code: data.referral_code,
-      referral_link: buildReferralLink(data.referral_code)
+      referral_link: buildReferralLink(data.referral_code),
+      referral_recorded: referralRecorded
     });
   } catch (err) {
     console.error('Unexpected error in /waitlist:', err);
