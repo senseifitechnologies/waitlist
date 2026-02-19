@@ -50,8 +50,13 @@ app.use(helmet());
 // Serve lightweight admin UI (static) at /admin
 app.use('/admin', express.static(path.join(__dirname, '..', 'frontend')));
 
-// Health check
-app.get('/health', (_req, res) => {
+// API router: mount at root and at /api so both /waitlist and /api/waitlist work
+const api = express.Router();
+
+api.get('/', (_req, res) => {
+  res.json({ name: 'Waitlist API', endpoints: ['POST /waitlist', 'POST /api/waitlist', 'GET /health'] });
+});
+api.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
@@ -133,11 +138,13 @@ async function joinWaitlistHandler(req, res) {
   }
 }
 
-app.post('/waitlist', joinWaitlistHandler);
-app.post('/waitlist/join', joinWaitlistHandler);
+api.post('/waitlist', joinWaitlistHandler);
+api.post('/waitlist/', joinWaitlistHandler);
+api.post('/waitlist/join', joinWaitlistHandler);
+api.post('/waitlist/join/', joinWaitlistHandler);
 
 // GET /waitlist - fetch all waitlist entries (ordered by created_at desc)
-app.get('/waitlist', async (_req, res) => {
+api.get('/waitlist', async (_req, res) => {
   try {
     const { data, error } = await supabase
       .from(WAITLIST_TABLE)
@@ -160,7 +167,7 @@ app.get('/waitlist', async (_req, res) => {
 });
 
 // GET /referrals/by-email?email=... - stats by user's email (no need to know referral code)
-app.get('/referrals/by-email', async (req, res) => {
+api.get('/referrals/by-email', async (req, res) => {
   try {
     const email = (req.query.email || '').trim().toLowerCase();
     if (!email) {
@@ -196,7 +203,7 @@ app.get('/referrals/by-email', async (req, res) => {
 });
 
 // GET /referrals/:code - stats for a referral code (successful signups only)
-app.get('/referrals/:code', async (req, res) => {
+api.get('/referrals/:code', async (req, res) => {
   try {
     const code = (req.params.code || '').trim();
     if (!code) {
@@ -226,6 +233,13 @@ app.get('/referrals/:code', async (req, res) => {
     console.error('Unexpected error in GET /referrals/:code:', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
+});
+
+app.use(api);
+app.use('/api', api);
+
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not found', path: _req.method + ' ' + _req.path });
 });
 
 // Start server
