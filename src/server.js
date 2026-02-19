@@ -40,6 +40,13 @@ function buildReferralLink(code) {
   return base ? `${base}?ref=${encodeURIComponent(code)}` : `?ref=${encodeURIComponent(code)}`;
 }
 
+const XP_PER_REFERRAL = Number(process.env.XP_PER_REFERRAL) || 100;
+const XP_PER_LEVEL2_REFERRAL = Number(process.env.XP_PER_LEVEL2_REFERRAL) || 50;
+
+function computeReferralXp(directCount, level2Count) {
+  return directCount * XP_PER_REFERRAL + level2Count * XP_PER_LEVEL2_REFERRAL;
+}
+
 // --- Express app setup ---
 const app = express();
 
@@ -197,11 +204,30 @@ api.get('/referrals/by-email', async (req, res) => {
       .eq('referrer_id', waitlistRow.id);
     const successfulCount = !countError ? (count ?? 0) : 0;
 
+    let level2Count = 0;
+    if (successfulCount > 0) {
+      const { data: directRefs } = await supabase
+        .from(REFERRALS_TABLE)
+        .select('referred_id')
+        .eq('referrer_id', waitlistRow.id);
+      const referredIds = (directRefs || []).map((r) => r.referred_id).filter(Boolean);
+      if (referredIds.length > 0) {
+        const { count: l2Count } = await supabase
+          .from(REFERRALS_TABLE)
+          .select('id', { count: 'exact', head: true })
+          .in('referrer_id', referredIds);
+        level2Count = l2Count ?? 0;
+      }
+    }
+    const xp = computeReferralXp(successfulCount, level2Count);
+
     return res.status(200).json({
       email: email,
       referral_code: waitlistRow.referral_code,
       referral_link: buildReferralLink(waitlistRow.referral_code),
-      successfulCount
+      successfulCount,
+      level2Count,
+      xp
     });
   } catch (err) {
     console.error('Unexpected error in GET /referrals/by-email:', err);
@@ -224,17 +250,36 @@ api.get('/referrals/:code', async (req, res) => {
       .maybeSingle();
 
     let successfulCount = 0;
+    let level2Count = 0;
     if (referrerRow) {
       const { count, error: countError } = await supabase
         .from(REFERRALS_TABLE)
         .select('id', { count: 'exact', head: true })
         .eq('referrer_id', referrerRow.id);
       if (!countError) successfulCount = count ?? 0;
+
+      if (successfulCount > 0) {
+        const { data: directRefs } = await supabase
+          .from(REFERRALS_TABLE)
+          .select('referred_id')
+          .eq('referrer_id', referrerRow.id);
+        const referredIds = (directRefs || []).map((r) => r.referred_id).filter(Boolean);
+        if (referredIds.length > 0) {
+          const { count: l2Count } = await supabase
+            .from(REFERRALS_TABLE)
+            .select('id', { count: 'exact', head: true })
+            .in('referrer_id', referredIds);
+          level2Count = l2Count ?? 0;
+        }
+      }
     }
+    const xp = computeReferralXp(successfulCount, level2Count);
 
     return res.status(200).json({
       code,
-      successfulCount
+      successfulCount,
+      level2Count,
+      xp
     });
   } catch (err) {
     console.error('Unexpected error in GET /referrals/:code:', err);
