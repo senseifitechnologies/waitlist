@@ -5,12 +5,18 @@ Minimal backend API that accepts waitlist emails, stores them in Supabase, and i
 ### Endpoints
 
 - **POST** `/waitlist`
-  - **Body**: `{ "email": "user@example.com" }`
+  - **Body**: `{ "email": "user@example.com", "ref": "optionalReferralCode" }`  
+    - `ref` is optional; when present and valid, the signup is attributed to that referrer (referral link usage).
   - **Responses**:
-    - `201` – `{ message: "Successfully joined the waitlist.", email: "user@example.com" }`
-    - `200` – `{ message: "You are already on the waitlist.", email: "user@example.com" }`
+    - `201` – `{ message: "Successfully joined the waitlist.", email: "user@example.com", referral_code: "...", referral_link: "https://...?ref=..." }`
+    - `200` – `{ message: "You are already on the waitlist.", email: "user@example.com", referral_code: "...", referral_link: "..." }`
     - `400` – `{ error: "Email is required." | "Invalid email format." }`
     - `500` – `{ error: "Failed to save email. Please try again later." | "Internal server error." }`
+
+- **GET** `/referrals/:code`
+  - Returns referral stats for the given code (successful signups only).
+  - **Response (200)**: `{ "code": "<code>", "successfulCount": <number> }`  
+    - `successfulCount` is the number of users who joined the waitlist using this referral link. Unknown codes return `successfulCount: 0`.
 
 - **GET** `/health`
   - Simple health check: `{ "status": "ok" }`
@@ -35,23 +41,27 @@ Set these in your local `.env` and in Render’s **Environment** settings:
 - **`WAITLIST_TABLE`** (optional)
   - Name of the table where emails are stored, default is `waitlist`.
 
+- **`REFERRALS_TABLE`** (optional)
+  - Name of the referrals table, default is `referrals`.
+
+- **`REFERRAL_BASE_URL`** (optional)
+  - Base URL for referral links (e.g. your landing page). Omit or leave empty for relative links like `?ref=CODE`.
+
 ### Supabase Table Schema (recommended)
 
-Create a table named `waitlist` with at least:
+Run the migration in **Supabase → SQL Editor** using `supabase/migrations/001_referral_schema.sql`. It:
 
-- **`id`**: `uuid`, default `uuid_generate_v4()`, primary key
+1. Adds **`referral_code`** to `waitlist` (unique, not null, backfilled for existing rows).
+2. Creates **`referrals`** table: `id`, `referrer_id` (FK waitlist), `referred_id` (FK waitlist), `created_at`, unique `(referrer_id, referred_id)`.
+
+If creating from scratch, create `waitlist` first with at least:
+
+- **`id`**: `uuid`, primary key, default `gen_random_uuid()`
 - **`email`**: `text`, `unique`
 - **`created_at`**: `timestamptz`, default `now()`
+- **`referral_code`**: `text`, `unique`, not null (see migration for backfill)
 
-Example SQL:
-
-```sql
-create table if not exists public.waitlist (
-  id uuid primary key default gen_random_uuid(),
-  email text unique not null,
-  created_at timestamptz not null default now()
-);
-```
+Then run the migration to add `referral_code` if missing and create `referrals`.
 
 ### Local Development
 
@@ -73,9 +83,18 @@ npm run dev
 4. **Test the API**
 
 ```bash
+# Join waitlist (returns referral_link and referral_code)
 curl -X POST http://localhost:3000/waitlist \
   -H "Content-Type: application/json" \
   -d '{"email": "test@example.com"}'
+
+# Join with a referrer (pass ref from someone's referral link)
+curl -X POST http://localhost:3000/waitlist \
+  -H "Content-Type: application/json" \
+  -d '{"email": "friend@example.com", "ref": "REFERRER_CODE"}'
+
+# Get referral stats for a code
+curl http://localhost:3000/referrals/REFERRER_CODE
 ```
 
 ### Render Deployment Notes
@@ -83,5 +102,5 @@ curl -X POST http://localhost:3000/waitlist \
 - **Environment**: Node
 - **Build Command**: `npm install`
 - **Start Command**: `npm start`
-- **Environment Variables**: Add `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and (optionally) `WAITLIST_TABLE`.
+- **Environment Variables**: Add `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and (optionally) `WAITLIST_TABLE`, `REFERRALS_TABLE`, `REFERRAL_BASE_URL`.
 

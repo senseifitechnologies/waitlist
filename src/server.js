@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -11,6 +12,8 @@ const PORT = process.env.PORT || 3000;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const WAITLIST_TABLE = process.env.WAITLIST_TABLE || 'waitlist';
+const REFERRALS_TABLE = process.env.REFERRALS_TABLE || 'referrals';
+const REFERRAL_BASE_URL = (process.env.REFERRAL_BASE_URL || '').trim().replace(/\/+$/, '');
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   // Fail fast if Supabase is not configured correctly
@@ -25,6 +28,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     persistSession: false
   }
 });
+
+// --- Referral helpers ---
+function generateReferralCode() {
+  return crypto.randomBytes(8).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function buildReferralLink(code) {
+  if (!code) return '';
+  const base = REFERRAL_BASE_URL || '';
+  return base ? `${base}?ref=${encodeURIComponent(code)}` : `?ref=${encodeURIComponent(code)}`;
+}
 
 // --- Express app setup ---
 const app = express();
@@ -41,10 +55,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// POST /waitlist - accepts { email }
+// POST /waitlist - accepts { email, ref?: referralCode }
 app.post('/waitlist', async (req, res) => {
   try {
-    const { email } = req.body || {};
+    const { email, ref: refCode } = req.body || {};
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ error: 'Email is required.' });
@@ -58,24 +72,32 @@ app.post('/waitlist', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format.' });
     }
 
-    // Insert into Supabase table (e.g., "waitlist" with columns: id (uuid), email (text, unique), created_at (timestamptz))
+    const referralCode = generateReferralCode();
+
     const { data, error } = await supabase
       .from(WAITLIST_TABLE)
-      .insert({ email: normalizedEmail })
+      .insert({ email: normalizedEmail, referral_code: referralCode })
       .select()
       .single();
 
     if (error) {
-      // Handle unique constraint violation gracefully
       const isDuplicate =
         typeof error.message === 'string' &&
         (error.message.toLowerCase().includes('duplicate') ||
           error.message.toLowerCase().includes('unique'));
 
       if (isDuplicate) {
+        const { data: existing } = await supabase
+          .from(WAITLIST_TABLE)
+          .select('referral_code')
+          .eq('email', normalizedEmail)
+          .single();
+        const code = existing?.referral_code || '';
         return res.status(200).json({
           message: 'You are already on the waitlist.',
-          email: normalizedEmail
+          email: normalizedEmail,
+          referral_code: code,
+          referral_link: buildReferralLink(code)
         });
       }
 
@@ -83,9 +105,28 @@ app.post('/waitlist', async (req, res) => {
       return res.status(500).json({ error: 'Failed to save email. Please try again later.' });
     }
 
+    const newId = data.id;
+
+    if (typeof refCode === 'string' && refCode.trim()) {
+      const trimmedRef = refCode.trim();
+      const { data: referrerRow } = await supabase
+        .from(WAITLIST_TABLE)
+        .select('id')
+        .eq('referral_code', trimmedRef)
+        .maybeSingle();
+      if (referrerRow && referrerRow.id !== newId) {
+        await supabase.from(REFERRALS_TABLE).insert({
+          referrer_id: referrerRow.id,
+          referred_id: newId
+        });
+      }
+    }
+
     return res.status(201).json({
       message: 'Successfully joined the waitlist.',
-      email: data.email
+      email: data.email,
+      referral_code: data.referral_code,
+      referral_link: buildReferralLink(data.referral_code)
     });
   } catch (err) {
     console.error('Unexpected error in /waitlist:', err);
@@ -112,6 +153,39 @@ app.get('/waitlist', async (_req, res) => {
     });
   } catch (err) {
     console.error('Unexpected error in GET /waitlist:', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET /referrals/:code - stats for a referral code (successful signups only)
+app.get('/referrals/:code', async (req, res) => {
+  try {
+    const code = (req.params.code || '').trim();
+    if (!code) {
+      return res.status(400).json({ error: 'Referral code is required.' });
+    }
+
+    const { data: referrerRow } = await supabase
+      .from(WAITLIST_TABLE)
+      .select('id')
+      .eq('referral_code', code)
+      .maybeSingle();
+
+    let successfulCount = 0;
+    if (referrerRow) {
+      const { count, error: countError } = await supabase
+        .from(REFERRALS_TABLE)
+        .select('id', { count: 'exact', head: true })
+        .eq('referrer_id', referrerRow.id);
+      if (!countError) successfulCount = count ?? 0;
+    }
+
+    return res.status(200).json({
+      code,
+      successfulCount
+    });
+  } catch (err) {
+    console.error('Unexpected error in GET /referrals/:code:', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
