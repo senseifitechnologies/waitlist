@@ -55,8 +55,8 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// POST /waitlist - accepts { email, ref?: referralCode }
-app.post('/waitlist', async (req, res) => {
+// Join waitlist handler - shared by POST /waitlist and POST /waitlist/join
+async function joinWaitlistHandler(req, res) {
   try {
     const { email, ref: refCode } = req.body || {};
 
@@ -66,7 +66,6 @@ app.post('/waitlist', async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Basic email format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({ error: 'Invalid email format.' });
@@ -132,7 +131,10 @@ app.post('/waitlist', async (req, res) => {
     console.error('Unexpected error in /waitlist:', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
-});
+}
+
+app.post('/waitlist', joinWaitlistHandler);
+app.post('/waitlist/join', joinWaitlistHandler);
 
 // GET /waitlist - fetch all waitlist entries (ordered by created_at desc)
 app.get('/waitlist', async (_req, res) => {
@@ -153,6 +155,42 @@ app.get('/waitlist', async (_req, res) => {
     });
   } catch (err) {
     console.error('Unexpected error in GET /waitlist:', err);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// GET /referrals/by-email?email=... - stats by user's email (no need to know referral code)
+app.get('/referrals/by-email', async (req, res) => {
+  try {
+    const email = (req.query.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    const { data: waitlistRow } = await supabase
+      .from(WAITLIST_TABLE)
+      .select('id, referral_code')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (!waitlistRow) {
+      return res.status(404).json({ error: 'Email not found on waitlist.' });
+    }
+
+    const { count, error: countError } = await supabase
+      .from(REFERRALS_TABLE)
+      .select('id', { count: 'exact', head: true })
+      .eq('referrer_id', waitlistRow.id);
+    const successfulCount = !countError ? (count ?? 0) : 0;
+
+    return res.status(200).json({
+      email: email,
+      referral_code: waitlistRow.referral_code,
+      referral_link: buildReferralLink(waitlistRow.referral_code),
+      successfulCount
+    });
+  } catch (err) {
+    console.error('Unexpected error in GET /referrals/by-email:', err);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });

@@ -18,6 +18,11 @@ Minimal backend API that accepts waitlist emails, stores them in Supabase, and i
   - **Response (200)**: `{ "code": "<code>", "successfulCount": <number> }`  
     - `successfulCount` is the number of users who joined the waitlist using this referral link. Unknown codes return `successfulCount: 0`.
 
+- **GET** `/referrals/by-email?email=user@example.com`
+  - Returns referral stats by the user’s email (no need to know their referral code).
+  - **Response (200)**: `{ "email": "...", "referral_code": "...", "referral_link": "...", "successfulCount": <number> }`
+  - **404**: `{ "error": "Email not found on waitlist." }` if the email is not on the waitlist.
+
 - **GET** `/health`
   - Simple health check: `{ "status": "ok" }`
 
@@ -93,8 +98,11 @@ curl -X POST http://localhost:3000/waitlist \
   -H "Content-Type: application/json" \
   -d '{"email": "friend@example.com", "ref": "REFERRER_CODE"}'
 
-# Get referral stats for a code
+# Get referral stats by code
 curl http://localhost:3000/referrals/REFERRER_CODE
+
+# Get referral stats by email (user only needs their email)
+curl "http://localhost:3000/referrals/by-email?email=you@example.com"
 ```
 
 ### Render Deployment Notes
